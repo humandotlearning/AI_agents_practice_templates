@@ -1,5 +1,6 @@
 from langchain_community.retrievers import BM25Retriever
 from langchain.tools import Tool
+from data import docs
 
 bm25_retriever = BM25Retriever.from_documents(docs)
 

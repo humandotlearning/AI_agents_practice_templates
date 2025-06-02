@@ -5,56 +5,56 @@ from langgraph.prebuilt import ToolNode
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import tools_condition
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
+from retriever import guest_info_tool
+from data import docs
 
-# Generate the chat interface, including the tools
-llm = HuggingFaceEndpoint(
-    repo_id="Qwen/Qwen2.5-Coder-32B-Instruct",
-    huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN,
-)
+from dotenv import load_dotenv
+import os
 
-chat = ChatHuggingFace(llm=llm, verbose=True)
-tools = [guest_info_tool]
-chat_with_tools = chat.bind_tools(tools)
+class AgenticRAGAgent:
+    def __init__(self):
+        load_dotenv()
+        HUGGINGFACEHUB_API_TOKEN = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+        self.llm = HuggingFaceEndpoint(
+            repo_id="Qwen/Qwen2.5-Coder-32B-Instruct",
+            huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN,
+        )
+        self.chat = ChatHuggingFace(llm=self.llm, verbose=True)
+        self.tools = [guest_info_tool]
+        self.chat_with_tools = self.chat.bind_tools(self.tools)
+        self.alfred = self._build_graph()
 
-# Generate the AgentState and Agent graph
-class AgentState(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
+    class AgentState(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
 
-def assistant(state: AgentState):
-    return {
-        "messages": [chat_with_tools.invoke(state["messages"])],
-    }
+    def assistant(self, state: 'AgenticRAGAgent.AgentState'):
+        return {
+            "messages": [self.chat_with_tools.invoke(state["messages"])],
+        }
 
-## The graph
-builder = StateGraph(AgentState)
+    def _build_graph(self):
+        builder = StateGraph(self.AgentState)
+        builder.add_node("assistant", self.assistant)
+        builder.add_node("tools", ToolNode(self.tools))
+        builder.add_edge(START, "assistant")
+        builder.add_conditional_edges(
+            "assistant",
+            tools_condition,
+        )
+        builder.add_edge("tools", "assistant")
+        return builder.compile()
 
-# Define nodes: these do the work
-builder.add_node("assistant", assistant)
-builder.add_node("tools", ToolNode(tools))
-
-# Define edges: these determine how the control flow moves
-builder.add_edge(START, "assistant")
-builder.add_conditional_edges(
-    "assistant",
-    # If the latest message requires a tool, route to tools
-    # Otherwise, provide a direct response
-    tools_condition,
-)
-builder.add_edge("tools", "assistant")
-alfred = builder.compile()
-
-messages = [HumanMessage(content="Tell me about our guest named 'Lady Ada Lovelace'.")]
-response = alfred.invoke({"messages": messages})
-
-print("🎩 Alfred's Response:")
-print(response['messages'][-1].content)
+    def ask(self, user_message: str):
+        messages = [HumanMessage(content=user_message)]
+        response = self.alfred.invoke({"messages": messages})
+        return response['messages'][-1].content
 
 def main():
     print("Hello from agentic-rag-agent!")
-
-
-
-
+    agent = AgenticRAGAgent()
+    result = agent.ask("Tell me about our guest named 'Lady Ada Lovelace'.")
+    print("🎩 Alfred's Response:")
+    print(result)
 
 if __name__ == "__main__":
     main()
