@@ -1,12 +1,16 @@
-from typing import TypedDict, Annotated
+from typing import TypedDict
+from typing_extensions import Annotated
 from langgraph.graph.message import add_messages
 from langchain_core.messages import AnyMessage, HumanMessage, AIMessage
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt import tools_condition
 from langchain_huggingface import HuggingFaceEndpoint, ChatHuggingFace
-from retriever import guest_info_tool
-from data import docs
+from tools.retriever import guest_info_tool
+from tools.hub_stat_tool import hub_stats_tool
+from tools.search_tool import search_tool
+from tools.weather_tool import weather_info_tool
+
 
 from dotenv import load_dotenv
 import os
@@ -20,7 +24,8 @@ class AgenticRAGAgent:
             huggingfacehub_api_token=HUGGINGFACEHUB_API_TOKEN,
         )
         self.chat = ChatHuggingFace(llm=self.llm, verbose=True)
-        self.tools = [guest_info_tool]
+        self.tools = [guest_info_tool, search_tool, weather_info_tool, hub_stats_tool]
+
         self.chat_with_tools = self.chat.bind_tools(self.tools)
         self.alfred = self._build_graph()
 
@@ -52,9 +57,11 @@ class AgenticRAGAgent:
 def main():
     print("Hello from agentic-rag-agent!")
     agent = AgenticRAGAgent()
-    result = agent.ask("Tell me about our guest named 'Lady Ada Lovelace'.")
+    messages = [HumanMessage(content="Who is Facebook and what's their most popular model?")]
+    response = agent.alfred.invoke({"messages": messages})
+
     print("🎩 Alfred's Response:")
-    print(result)
+    print(response['messages'][-1].content)
 
 if __name__ == "__main__":
     main()
